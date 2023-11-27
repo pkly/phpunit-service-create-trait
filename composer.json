@@ -1,0 +1,20 @@
+{
+    "name": "pkly/phpunit-service-create-trait",
+    "description": "A helper trait for PHPUnit 10+ for easier creation of services with dependencies in unit testing",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "pkly"
+        }
+    ],
+    "require": {
+        "php": ">=8.2",
+        "phpunit/phpunit": ">=10"
+    },
+    "autoload": {
+        "psr-4": {
+           "Pkly\\": "src/"
+        }
+    }
+}
