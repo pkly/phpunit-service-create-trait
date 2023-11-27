@@ -73,11 +73,13 @@ trait ServiceMockHelperTrait
     }
 
     /**
+     * @param class-string $class
      * @param list<mixed> $definedParameters
      *
      * @return list<mixed>
      */
     private function __createAndGetMethodParams(
+        string $class,
         \ReflectionMethod $method,
         array $definedParameters
     ): array {
@@ -90,10 +92,10 @@ trait ServiceMockHelperTrait
                 continue;
             }
 
-            [$mocked, $type] = $this->__createMockedServiceParameter($method->class, $parameter, $method);
+            [$mocked, $type] = $this->__createMockedServiceParameter($class, $parameter, $method);
             $params[] = $mocked;
 
-            $this->mocks[$method->class][$type] = $mocked;
+            $this->mocks[$class][$type] = $mocked;
         }
 
         return $params;
@@ -162,7 +164,7 @@ trait ServiceMockHelperTrait
         $params = [];
 
         if (null !== ($construct = $reflection->getConstructor())) {
-            $params = $this->__createAndGetMethodParams($construct, $constructor);
+            $params = $this->__createAndGetMethodParams($class, $construct, $constructor);
         }
 
         $service = new $class(...$params);
@@ -172,7 +174,7 @@ trait ServiceMockHelperTrait
                 continue;
             }
 
-            $service->{$method->getName()}(...$this->__createAndGetMethodParams($method, $required));
+            $service->{$method->getName()}(...$this->__createAndGetMethodParams($class, $method, $required));
         }
 
         return $service;
@@ -206,7 +208,7 @@ trait ServiceMockHelperTrait
         $params = [];
 
         if (null !== ($construct = $reflection->getConstructor())) {
-            $params = $this->__createAndGetMethodParams($construct, $constructor);
+            $params = $this->__createAndGetMethodParams($class, $construct, $constructor);
         }
 
         $service = (new MockBuilder($this, $class))
@@ -220,7 +222,7 @@ trait ServiceMockHelperTrait
                 continue;
             }
 
-            $service->{$method->getName()}(...$this->__createAndGetMethodParams($method, $required));
+            $service->{$method->getName()}(...$this->__createAndGetMethodParams($class, $method, $required));
         }
 
         \PHPUnit\Event\Facade::emitter()->testCreatedPartialMockObject(
