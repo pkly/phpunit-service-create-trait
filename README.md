@@ -1,6 +1,16 @@
 # PHPUnit Service Create Trait
 A helper trait for PHPUnit 10+ for easier creation of services with dependencies in unit testing
 
+## Installation
+
+Simply run
+
+```
+composer require --dev pkly/phpunit-service-create-trait
+```
+
+Currently compatible only with PHPUnit 10 (11?)
+
 ## Usage
 
 In any of your PHPUnit test cases simply 
