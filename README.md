@@ -1,6 +1,8 @@
 # PHPUnit Service Create Trait
 A helper trait for PHPUnit 10+ for easier creation of services with dependencies in unit testing
 
+[![Packagist Downloads](https://img.shields.io/packagist/dt/pkly/phpunit-service-create-trait)](https://packagist.org/packages/pkly/phpunit-service-create-trait)
+
 ## Installation
 
 Simply run
