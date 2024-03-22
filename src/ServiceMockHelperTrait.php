@@ -15,7 +15,7 @@ trait ServiceMockHelperTrait
     /**
      * @param class-string<object> $class
      *
-     * @return array{0: MockObject, 1: class-string}
+     * @return array{0: MockObject|mixed, 1: class-string|false}
      */
     private function __createMockedServiceParameter(
         string $class,
@@ -48,27 +48,26 @@ trait ServiceMockHelperTrait
             $type = $type->getTypes()[0];
         }
 
+        $defaultValue = false;
+
         if ($type->isBuiltin()) {
-            throw new \LogicException(
-                sprintf(
-                    'Specify parameter $%s in %s::%s',
-                    $parameter->getName(),
-                    $class,
-                    $method->getName()
-                )
-            );
+            if (!$parameter->isDefaultValueAvailable()) {
+                throw new \LogicException(
+                    sprintf(
+                        'Specify parameter $%s in %s::%s',
+                        $parameter->getName(),
+                        $class,
+                        $method->getName()
+                    )
+                );
+            }
+
+            $defaultValue = $parameter->isDefaultValueAvailable();
         }
 
-        /**
-         * @var class-string<object> $final
-         *
-         * @noinspection PhpRedundantVariableDocTypeInspection
-         */
-        $final = $type->getName();
-
         return [
-            $this->createMock($final),
-            $type->getName(),
+            $defaultValue ? $parameter->getDefaultValue() : $this->createMock($type->getName()),
+            $defaultValue ? false : $type->getName(),
         ];
     }
 
@@ -94,6 +93,10 @@ trait ServiceMockHelperTrait
 
             [$mocked, $type] = $this->__createMockedServiceParameter($class, $parameter, $method);
             $params[] = $mocked;
+
+            if (false === $type) {
+                continue;
+            }
 
             $this->mocks[$class][$type] = $mocked;
         }
