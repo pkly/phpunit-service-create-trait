@@ -188,8 +188,8 @@ trait ServiceMockHelperTrait
      *
      * @param class-string<T> $class
      * @param list<string> $methods
-     * @param array<string, MockObject|object|scalar> $constructor
-     * @param array<string, MockObject|object|scalar> $required
+     * @param array<string, mixed> $constructor
+     * @param array<string, mixed> $required
      *
      * @return T&MockObject
      */
