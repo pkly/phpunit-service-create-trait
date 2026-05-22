@@ -113,11 +113,11 @@ trait ServiceMockHelperTrait
     }
 
     /**
-     * @template T of object
+     * @template TMockFetchTarget of object
      *
-     * @param class-string<T> $class
+     * @param class-string<TMockFetchTarget> $class
      *
-     * @return MockObject&T
+     * @return MockObject&TMockFetchTarget
      */
     protected function getMockedService(
         string $class
@@ -139,18 +139,18 @@ trait ServiceMockHelperTrait
             );
         }
 
-        /** @var MockObject&T $object */
+        /** @var MockObject&TMockFetchTarget $object */
         return $object;
     }
 
     /**
-     * @template T
+     * @template TMockCreationTarget
      *
-     * @param class-string<T> $class
+     * @param class-string<TMockCreationTarget> $class
      * @param array<string, mixed> $constructor
      * @param array<string, mixed> $required
      *
-     * @return T
+     * @return TMockCreationTarget
      */
     protected function createRealMockedServiceInstance(
         string $class,
@@ -187,14 +187,14 @@ trait ServiceMockHelperTrait
     }
 
     /**
-     * @template T
+     * @template TMockCreationPartialTarget
      *
-     * @param class-string<T> $class
+     * @param class-string<TMockCreationPartialTarget> $class
      * @param list<non-empty-string> $methods
      * @param array<string, mixed> $constructor
      * @param array<string, mixed> $required
      *
-     * @return T&MockObject
+     * @return TMockCreationPartialTarget&MockObject
      */
     protected function createRealPartialMockedServiceInstance(
         string $class,
