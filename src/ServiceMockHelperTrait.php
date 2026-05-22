@@ -160,8 +160,8 @@ trait ServiceMockHelperTrait
         assert($this instanceof TestCase);
 
         try {
-            $reflection = new \ReflectionClass($class);
-        } catch (\ReflectionException $e) {
+            $reflection = new \ReflectionClass($class); // @phpstan-ignore-line
+        } catch (\ReflectionException $e) { // @phpstan-ignore-line
             throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
         }
 
@@ -205,8 +205,8 @@ trait ServiceMockHelperTrait
         assert($this instanceof TestCase);
 
         try {
-            $reflection = new \ReflectionClass($class);
-        } catch (\ReflectionException $e) {
+            $reflection = new \ReflectionClass($class); // @phpstan-ignore-line
+        } catch (\ReflectionException $e) { // @phpstan-ignore-line
             throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
         }
 
