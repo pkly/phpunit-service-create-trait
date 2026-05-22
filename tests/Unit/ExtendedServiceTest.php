@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Pkly\Tests\Unit;
 
+use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Pkly\ServiceMockHelperTrait;
-use PHPUnit\Framework\Attributes\TestWith;
 use Pkly\Tests\Service\BasicService;
 use Pkly\Tests\Service\ExtendedService;
 
