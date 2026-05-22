@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Pkly;
 
 use PHPUnit\Framework\MockObject\MockBuilder;
