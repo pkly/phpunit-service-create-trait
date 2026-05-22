@@ -76,7 +76,7 @@ trait ServiceMockHelperTrait
 
     /**
      * @param class-string $class
-     * @param list<mixed> $definedParameters
+     * @param array<string, mixed> $definedParameters
      *
      * @return list<mixed>
      */
@@ -155,7 +155,7 @@ trait ServiceMockHelperTrait
         string $class,
         array $constructor = [],
         array $required = []
-    ): object {
+    ): mixed {
         assert($this instanceof TestCase);
 
         try {
@@ -201,7 +201,7 @@ trait ServiceMockHelperTrait
         array $methods,
         array $constructor = [],
         array $required = []
-    ): object {
+    ): mixed {
         assert($this instanceof TestCase);
 
         try {
