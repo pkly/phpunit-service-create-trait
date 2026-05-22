@@ -4,6 +4,7 @@ namespace Pkly;
 
 use PHPUnit\Framework\MockObject\MockBuilder;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\TestCase;
 
 trait ServiceMockHelperTrait
 {
@@ -111,13 +112,11 @@ trait ServiceMockHelperTrait
      * @param class-string<object>|null $service
      *
      * @return MockObject&T
-     *
-     * @phpstan-ignore-next-line
      */
     protected function getMockedService(
         string $class,
         string|null $service = null
-    ): MockObject {
+    ): mixed {
         if (null === $service) {
             reset($this->mocks);
             $service = key($this->mocks);
@@ -154,7 +153,9 @@ trait ServiceMockHelperTrait
         string $class,
         array $constructor = [],
         array $required = []
-    ) {
+    ): object {
+        assert($this instanceof TestCase);
+
         try {
             $reflection = new \ReflectionClass($class);
             /** @phpstan-ignore-next-line */
@@ -198,7 +199,9 @@ trait ServiceMockHelperTrait
         array $methods,
         array $constructor = [],
         array $required = []
-    ) {
+    ): object {
+        assert($this instanceof TestCase);
+
         try {
             $reflection = new \ReflectionClass($class);
             /** @phpstan-ignore-next-line */
@@ -214,7 +217,7 @@ trait ServiceMockHelperTrait
             $params = $this->__createAndGetMethodParams($class, $construct, $constructor);
         }
 
-        $service = (new MockBuilder($this, $class))
+        $service = new MockBuilder($this, $class)
             ->setConstructorArgs($params)
             ->disableOriginalClone()
             ->onlyMethods($methods)

@@ -9,12 +9,24 @@
         }
     ],
     "require": {
-        "php": ">=8.2",
-        "phpunit/phpunit": ">=10"
+        "php": ">=8.4",
+        "phpunit/phpunit": ">=12"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2",
+        "phpstan/phpstan-strict-rules": "^2",
+        "phpstan/phpstan-phpunit": "^2",
+        "pedrotroller/php-cs-custom-fixer": "^2",
+        "friendsofphp/php-cs-fixer": "^3"
     },
     "autoload": {
         "psr-4": {
            "Pkly\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Pkly\\Tests\\": "tests/"
         }
     }
 }
