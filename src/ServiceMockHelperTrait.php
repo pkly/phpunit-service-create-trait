@@ -18,7 +18,7 @@ trait ServiceMockHelperTrait
     /**
      * @param class-string<object> $class
      *
-     * @return array{0: MockObject|mixed, 1: class-string|false}
+     * @return array{0: MockObject, 1: class-string}|array{0: mixed, 1: false}
      */
     private function __createMockedServiceParameter(
         string $class,
@@ -104,6 +104,8 @@ trait ServiceMockHelperTrait
                 continue;
             }
 
+            assert($mocked instanceof MockObject);
+
             $this->mocks[$class][$type] = $mocked;
         }
 
@@ -159,7 +161,6 @@ trait ServiceMockHelperTrait
 
         try {
             $reflection = new \ReflectionClass($class);
-            /** @phpstan-ignore-next-line */
         } catch (\ReflectionException $e) {
             throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
         }
@@ -189,7 +190,7 @@ trait ServiceMockHelperTrait
      * @template T
      *
      * @param class-string<T> $class
-     * @param list<string> $methods
+     * @param list<non-empty-string> $methods
      * @param array<string, mixed> $constructor
      * @param array<string, mixed> $required
      *
@@ -205,7 +206,6 @@ trait ServiceMockHelperTrait
 
         try {
             $reflection = new \ReflectionClass($class);
-            /** @phpstan-ignore-next-line */
         } catch (\ReflectionException $e) {
             throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
         }
