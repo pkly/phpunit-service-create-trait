@@ -1,5 +1,5 @@
 # PHPUnit Service Create Trait
-A helper trait for PHPUnit 10+ for easier creation of services with dependencies in unit testing
+A helper trait for PHPUnit 12+ for easier creation of services with dependencies in unit testing
 
 [![Packagist Downloads](https://img.shields.io/packagist/dt/pkly/phpunit-service-create-trait)](https://packagist.org/packages/pkly/phpunit-service-create-trait)
 
@@ -11,7 +11,7 @@ Simply run
 composer require --dev pkly/phpunit-service-create-trait
 ```
 
-Currently compatible only with PHPUnit 10 (11?)
+Currently compatible only with PHPUnit 12+
 
 ## Usage
 
@@ -53,11 +53,6 @@ That will use your object instead of creating one for you, keep in mind you cann
 
 Sure, works the same, just use `createRealPartialMockedServiceInstance` instead of `createRealMockedServiceInstance`, in that case you must
 also specify the methods to override in your mock. Returned instance is `T&MockObject`.
-
-### Tests? More examples?
-
-I'll add them shortly, for now this code is being used thoroughly in a few of the projects I work at and I grew tired of updating it
-across multiple repositories. It's also very simple, so I doubt anyone is going to complain.
 
 ### Feature requests?
 

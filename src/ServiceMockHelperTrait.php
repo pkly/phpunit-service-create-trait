@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Pkly;
 
 use PHPUnit\Framework\MockObject\MockBuilder;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\TestCase;
 
 trait ServiceMockHelperTrait
 {
@@ -15,7 +18,7 @@ trait ServiceMockHelperTrait
     /**
      * @param class-string<object> $class
      *
-     * @return array{0: MockObject|mixed, 1: class-string|false}
+     * @return array{0: MockObject, 1: class-string}|array{0: mixed, 1: false}
      */
     private function __createMockedServiceParameter(
         string $class,
@@ -65,15 +68,18 @@ trait ServiceMockHelperTrait
             $defaultValue = $parameter->isDefaultValueAvailable();
         }
 
+        /** @var class-string $typeName */
+        $typeName = $type->getName();
+
         return [
-            $defaultValue ? $parameter->getDefaultValue() : $this->createMock($type->getName()),
-            $defaultValue ? false : $type->getName(),
+            $defaultValue ? $parameter->getDefaultValue() : $this->createMock($typeName),
+            $defaultValue ? false : $typeName,
         ];
     }
 
     /**
      * @param class-string $class
-     * @param list<mixed> $definedParameters
+     * @param array<string, mixed> $definedParameters
      *
      * @return list<mixed>
      */
@@ -98,6 +104,8 @@ trait ServiceMockHelperTrait
                 continue;
             }
 
+            assert($mocked instanceof MockObject);
+
             $this->mocks[$class][$type] = $mocked;
         }
 
@@ -107,21 +115,15 @@ trait ServiceMockHelperTrait
     /**
      * @template T of object
      *
-     * @param class-string<T>|string $class
-     * @param class-string<object>|null $service
+     * @param class-string<T> $class
      *
      * @return MockObject&T
-     *
-     * @phpstan-ignore-next-line
      */
     protected function getMockedService(
-        string $class,
-        string|null $service = null
-    ): MockObject {
-        if (null === $service) {
-            reset($this->mocks);
-            $service = key($this->mocks);
-        }
+        string $class
+    ): mixed {
+        reset($this->mocks);
+        $service = key($this->mocks);
 
         if (null === $service) {
             throw new \LogicException('No services have been mocked yet by the trait');
@@ -154,11 +156,12 @@ trait ServiceMockHelperTrait
         string $class,
         array $constructor = [],
         array $required = []
-    ) {
+    ): mixed {
+        assert($this instanceof TestCase);
+
         try {
-            $reflection = new \ReflectionClass($class);
-            /** @phpstan-ignore-next-line */
-        } catch (\ReflectionException $e) {
+            $reflection = new \ReflectionClass($class); // @phpstan-ignore-line
+        } catch (\ReflectionException $e) { // @phpstan-ignore-line
             throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
         }
 
@@ -187,7 +190,7 @@ trait ServiceMockHelperTrait
      * @template T
      *
      * @param class-string<T> $class
-     * @param list<string> $methods
+     * @param list<non-empty-string> $methods
      * @param array<string, mixed> $constructor
      * @param array<string, mixed> $required
      *
@@ -198,11 +201,12 @@ trait ServiceMockHelperTrait
         array $methods,
         array $constructor = [],
         array $required = []
-    ) {
+    ): mixed {
+        assert($this instanceof TestCase);
+
         try {
-            $reflection = new \ReflectionClass($class);
-            /** @phpstan-ignore-next-line */
-        } catch (\ReflectionException $e) {
+            $reflection = new \ReflectionClass($class); // @phpstan-ignore-line
+        } catch (\ReflectionException $e) { // @phpstan-ignore-line
             throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
         }
 
@@ -214,7 +218,7 @@ trait ServiceMockHelperTrait
             $params = $this->__createAndGetMethodParams($class, $construct, $constructor);
         }
 
-        $service = (new MockBuilder($this, $class))
+        $service = new MockBuilder($this, $class)
             ->setConstructorArgs($params)
             ->disableOriginalClone()
             ->onlyMethods($methods)
