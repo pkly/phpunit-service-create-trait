@@ -139,7 +139,7 @@ trait ServiceMockHelperTrait
             );
         }
 
-        /** @var MockObject&T $object */
+        /** @var MockObject&TMockFetchTarget $object */
         return $object;
     }
 
