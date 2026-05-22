@@ -68,9 +68,12 @@ trait ServiceMockHelperTrait
             $defaultValue = $parameter->isDefaultValueAvailable();
         }
 
+        /** @var class-string $typeName */
+        $typeName = $type->getName();
+
         return [
-            $defaultValue ? $parameter->getDefaultValue() : $this->createMock($type->getName()),
-            $defaultValue ? false : $type->getName(),
+            $defaultValue ? $parameter->getDefaultValue() : $this->createMock($typeName),
+            $defaultValue ? false : $typeName,
         ];
     }
 
@@ -110,19 +113,15 @@ trait ServiceMockHelperTrait
     /**
      * @template T of object
      *
-     * @param class-string<T>|string $class
-     * @param class-string<object>|null $service
+     * @param class-string<T> $class
      *
      * @return MockObject&T
      */
     protected function getMockedService(
-        string $class,
-        string|null $service = null
+        string $class
     ): mixed {
-        if (null === $service) {
-            reset($this->mocks);
-            $service = key($this->mocks);
-        }
+        reset($this->mocks);
+        $service = key($this->mocks);
 
         if (null === $service) {
             throw new \LogicException('No services have been mocked yet by the trait');
