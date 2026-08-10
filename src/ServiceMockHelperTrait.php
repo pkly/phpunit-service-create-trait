@@ -303,12 +303,17 @@ trait ServiceMockHelperTrait
     private function __createUnregisteredMock(
         string $type
     ): MockObject {
+        // arguments are passed positionally on purpose: PHPUnit marks its API as
+        // @no-named-arguments, so parameter names are not covered by its BC promise
         $double = new MockGenerator()->testDouble(
             $type,
-            true,
-            callOriginalConstructor: false,
-            callOriginalClone: false,
-            returnValueGeneration: $this->__generateReturnValues(),
+            true, // $mockObject
+            [], // $methods
+            [], // $arguments
+            '', // $mockClassName
+            false, // $callOriginalConstructor
+            false, // $callOriginalClone
+            $this->__generateReturnValues(), // $returnValueGeneration
         );
 
         assert($double instanceof MockObject);
