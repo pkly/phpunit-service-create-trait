@@ -496,7 +496,9 @@ trait ServiceMockHelperTrait
 
         [, $state, $key] = $this->__resolveDouble($class, $parameter, $service);
 
-        /** @var Stub&TStubFetchTarget $double */
+        // every double is a MockObject, which is a Stub; it is handed out as the narrower Stub
+        // so callers do not configure expectations on something PHPUnit never verifies
+        /** @var MockObject&TStubFetchTarget $double */
         $double = $state['doubles'][$key];
 
         return $double;
