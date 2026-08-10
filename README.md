@@ -48,39 +48,37 @@ This allows you to write complex tests without wasting time updating your constr
 
 PHPUnit is separating mocks from stubs and complains about every mock object that has no expectations
 configured (`No expectations were configured for the mock object for X ...`). Creating a mock for every
-single dependency would drown your test run in those notices, so the trait only creates what you ask for:
+single dependency would drown your test run in those notices, so every dependency is created as a double
+that PHPUnit does not know about - it is never verified and never complained about. Fetching one is what
+hands it over to the test:
 
-- a dependency you fetch with `getMockedService()` is a `MockObject`
-- everything else is a plain `Stub`
+- `getMockedService()` registers the double with the test case and returns it as a `MockObject`, so
+  `expects()` is verified for you (and PHPUnit does tell you off if you then configure nothing on it)
+- `getStubbedService()` returns the very same object as a `Stub`, still unregistered, for when you only
+  need to configure return values
+- everything you never fetch stays invisible to PHPUnit
 
-To make that possible the returned service is a **lazy ghost** - it is only really constructed the first
-time you use it. That means expectations have to be declared *before* you touch the service:
+The service itself is constructed immediately, so the order does not matter - expectations can be declared
+before or after you use it:
 
 ```php
 public function testSomething(): void
 {
     $service = $this->createRealMockedServiceInstance(AnyClass::class);
 
-    // declare first ...
     $this->getMockedService(EntityManagerInterface::class)
         ->expects($this->once())
         ->method('flush');
 
-    // ... then use the service, this is where it gets constructed
     $service->doSomething();
 }
 ```
 
-Asking for a mock after the service has been used throws a `LogicException`, because such a mock could
-never end up inside the already constructed service.
-
-If you only need to configure return values without setting any expectation, use `getStubbedService()`,
-which returns the very same stub the service will receive.
-
 ### Several dependencies of the same type
 
-Doubles are addressed by type, and a service depending on the same type twice simply receives the same
-double for both parameters. Pass a parameter name as the second argument when you need them apart:
+Every parameter gets its own double, so a service depending on the same type twice receives two distinct
+ones. Fetching such a type without saying which parameter you mean throws a `LogicException` - pass the
+parameter name as the second argument:
 
 ```php
 $first = $this->getMockedService(BasicService::class, 'first');
@@ -104,7 +102,10 @@ That will use your object instead of creating one for you, keep in mind you cann
 Some parameters always have to be provided that way:
 
 - scalar parameters without a default value
-- internal classes (`\DateInterval` and friends) and enums, doubling those tends to break in confusing ways
+- enums, those cannot be doubled at all
+
+Internal classes (`\DateInterval` and friends) are handed to PHPUnit like any other type - most of them
+double just fine, and the ones that do not produce a precise error from PHPUnit telling you to provide it.
 
 A nullable dependency (`?Foo`) still receives a double, pass `null` explicitly if that is what your test needs.
 
@@ -113,9 +114,9 @@ A nullable dependency (`?Foo`) still receives a double, pass `null` explicitly i
 Sure, works the same, just use `createRealPartialMockedServiceInstance` instead of `createRealMockedServiceInstance`, in that case you must
 also specify the methods to override in your mock. Returned instance is `T&MockObject`.
 
-A partial mock is a generated class and cannot be created lazily, so it is built immediately and all of its
-dependencies are mocks, exactly like they used to be. Provide them explicitly or configure them if you want
-to keep your test run notice free.
+Its dependencies behave exactly like the ones of a normal service - unregistered until you fetch them.
+The partial mock itself is a regular PHPUnit mock though, so the methods you override are subject to the
+usual expectation rules.
 
 ### Feature requests?
 

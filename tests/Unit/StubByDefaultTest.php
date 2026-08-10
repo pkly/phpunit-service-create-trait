@@ -20,18 +20,22 @@ class StubByDefaultTest extends TestCase
 {
     use ServiceMockHelperTrait;
 
-    public function testDependenciesNobodyConfiguresAreStubs(): void
+    /**
+     * Nothing is configured here on purpose: dependencies the test never asks for stay
+     * unregistered, so failOnPhpunitNotice does not trip over their missing expectations.
+     */
+    public function testDependenciesNobodyConfiguresAreLeftAlone(): void
     {
         $service = $this->createRealMockedServiceInstance(InterfaceService::class);
 
+        static::assertInstanceOf(MessengerInterface::class, $service->getMessenger());
         static::assertInstanceOf(Stub::class, $service->getMessenger());
-        static::assertNotInstanceOf(MockObject::class, $service->getMessenger());
 
+        static::assertInstanceOf(BasicService::class, $service->getService());
         static::assertInstanceOf(Stub::class, $service->getService());
-        static::assertNotInstanceOf(MockObject::class, $service->getService());
     }
 
-    public function testOnlyRequestedDependenciesBecomeMocks(): void
+    public function testRequestedDependenciesCarryExpectations(): void
     {
         $service = $this->createRealMockedServiceInstance(InterfaceService::class);
 
@@ -48,7 +52,6 @@ class StubByDefaultTest extends TestCase
         static::assertTrue($service->notify('hello'));
 
         static::assertInstanceOf(MockObject::class, $service->getMessenger());
-        static::assertNotInstanceOf(MockObject::class, $service->getService());
     }
 
     public function testInterfaceDependencyIsDoubled(): void

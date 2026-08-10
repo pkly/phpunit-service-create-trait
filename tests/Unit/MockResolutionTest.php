@@ -20,18 +20,21 @@ class MockResolutionTest extends TestCase
 {
     use ServiceMockHelperTrait;
 
-    public function testSameTypeParametersShareOneDouble(): void
+    public function testSameTypeParametersGetSeparateDoubles(): void
     {
         $service = $this->createRealMockedServiceInstance(DuplicateTypeService::class);
 
-        $mock = $this->getMockedService(BasicService::class);
-        $mock->expects(static::exactly(2))
-            ->method('process')
-            ->willReturn('SAME');
+        static::assertNotSame($service->getFirst(), $service->getSecond());
+    }
 
-        static::assertSame('SAME', $service->process('hello'));
-        static::assertSame($mock, $service->getFirst());
-        static::assertSame($mock, $service->getSecond());
+    public function testSameTypeParametersCannotBeTargetedWithoutAName(): void
+    {
+        $this->createRealMockedServiceInstance(DuplicateTypeService::class);
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage(sprintf('depends on %s more than once', BasicService::class));
+
+        $this->getMockedService(BasicService::class);
     }
 
     public function testSameTypeParametersCanBeTargetedByName(): void
@@ -106,24 +109,29 @@ class MockResolutionTest extends TestCase
         $this->getMockedService(BasicService::class);
     }
 
-    public function testMockingAfterTheServiceHasBeenUsedThrows(): void
+    public function testMockingAfterTheServiceHasBeenUsedIsAllowed(): void
     {
         $service = $this->createRealMockedServiceInstance(ExtendedService::class);
 
         static::assertNull($service->work('hello'));
 
-        $this->expectException(\LogicException::class);
-        $this->expectExceptionMessage('has already been created');
+        // the double the service already holds is the one handed out here, so expectations
+        // declared after the fact still apply to it
+        $this->getMockedService(BasicService::class)
+            ->expects(static::once())
+            ->method('process')
+            ->with('hello')
+            ->willReturn('NEW-hello');
 
-        $this->getMockedService(BasicService::class);
+        static::assertSame('NEW-hello', $service->work('hello'));
     }
 
-    public function testInternalDependencyThrows(): void
+    public function testInternalDependencyIsDoubled(): void
     {
-        $this->expectException(\LogicException::class);
-        $this->expectExceptionMessage('is an internal class');
+        $service = $this->createRealMockedServiceInstance(IntervalService::class);
 
-        $this->createRealMockedServiceInstance(IntervalService::class);
+        static::assertInstanceOf(\DateInterval::class, $service->getInterval());
+        static::assertSame($this->getStubbedService(\DateInterval::class), $service->getInterval());
     }
 
     public function testInternalDependencyCanBeProvided(): void

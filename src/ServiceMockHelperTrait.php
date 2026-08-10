@@ -4,18 +4,20 @@ declare(strict_types=1);
 
 namespace Pkly;
 
+use PHPUnit\Event\Facade as EventFacade;
+use PHPUnit\Framework\MockObject\Generator\Generator as MockGenerator;
 use PHPUnit\Framework\MockObject\MockBuilder;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Metadata\Parser\Registry as MetadataRegistry;
 
 /**
  * @phpstan-type ServiceState array{
  *     class: class-string,
  *     parameters: list<array{name: string, type: class-string}>,
- *     mocks: array<string, MockObject>,
- *     stubs: array<string, Stub>,
- *     initialized: bool
+ *     doubles: array<string, MockObject>,
+ *     registered: array<string, true>
  * }
  */
 trait ServiceMockHelperTrait
@@ -48,28 +50,15 @@ trait ServiceMockHelperTrait
     }
 
     /**
-     * @param class-string $class
-     * @param list<array{name: string, type: class-string}> $parameters
-     * @param array<string, MockObject> $mocks
-     * @param array<string, Stub> $stubs
+     * @param ServiceState $state
      */
     private function __registerService(
         object $service,
-        string $class,
-        array $parameters,
-        array $mocks = [],
-        array $stubs = [],
-        bool $initialized = false
+        array $state
     ): void {
-        $this->__serviceStates()->offsetSet($service, [
-            'class' => $class,
-            'parameters' => $parameters,
-            'mocks' => $mocks,
-            'stubs' => $stubs,
-            'initialized' => $initialized,
-        ]);
+        $this->__serviceStates()->offsetSet($service, $state);
 
-        $this->serviceInstances[$class] = $service;
+        $this->serviceInstances[$state['class']] = $service;
         $this->currentServiceInstance = $service;
     }
 
@@ -99,33 +88,6 @@ trait ServiceMockHelperTrait
     }
 
     /**
-     * @param class-string|null $service
-     *
-     * @return array{0: object, 1: ServiceState}
-     */
-    private function __resolveServiceInstance(
-        string|null $service
-    ): array {
-        if (null !== $service) {
-            if (!isset($this->serviceInstances[$service])) {
-                throw new \LogicException(
-                    sprintf(
-                        'Service %s has not been created by the trait yet',
-                        $service
-                    )
-                );
-            }
-
-            $instance = $this->serviceInstances[$service];
-        } else {
-            $instance = $this->currentServiceInstance
-                ?? throw new \LogicException('No services have been mocked yet by the trait');
-        }
-
-        return [$instance, $this->__getServiceState($instance)];
-    }
-
-    /**
      * Doubles are addressed by their type, or by their type and parameter name when a specific
      * parameter of an ambiguous (repeated) type has to be targeted.
      */
@@ -137,24 +99,135 @@ trait ServiceMockHelperTrait
     }
 
     /**
+     * Locate the double for a type within one service's state.
+     *
      * @param ServiceState $state
+     *
+     * @return string|null the key it is stored under, or null when that service has no such dependency
      */
-    private function __assertParameterExists(
+    private function __findDoubleKey(
         array $state,
         string $type,
         string|null $parameter
-    ): void {
+    ): string|null {
+        if (null !== $parameter) {
+            $key = $this->__doubleKey($type, $parameter);
+
+            return isset($state['doubles'][$key]) ? $key : null;
+        }
+
+        $found = null;
+
         foreach ($state['parameters'] as $definition) {
             if ($definition['type'] !== $type) {
                 continue;
             }
 
-            if (null === $parameter || $definition['name'] === $parameter) {
-                return;
+            $key = $this->__doubleKey($type, $definition['name']);
+
+            if (!isset($state['doubles'][$key])) {
+                continue;
+            }
+
+            if (null !== $found) {
+                throw new \LogicException(
+                    sprintf(
+                        'Service %s depends on %s more than once, pass the parameter name to target one of them',
+                        $state['class'],
+                        $type
+                    )
+                );
+            }
+
+            $found = $key;
+        }
+
+        return $found;
+    }
+
+    /**
+     * Resolve which service instance a double should be taken from.
+     *
+     * Defaults to the most recently created service. When that service has no such dependency the
+     * other services created by the trait are searched, so that building a second object mid-test
+     * does not hide the dependencies of the one actually under test.
+     *
+     * @param class-string $type
+     * @param class-string|null $service
+     *
+     * @return array{0: object, 1: ServiceState, 2: string}
+     */
+    private function __resolveDouble(
+        string $type,
+        string|null $parameter,
+        string|null $service
+    ): array {
+        if (null !== $service) {
+            if (!isset($this->serviceInstances[$service])) {
+                throw new \LogicException(
+                    sprintf('Service %s has not been created by the trait yet', $service)
+                );
+            }
+
+            $instance = $this->serviceInstances[$service];
+            $state = $this->__getServiceState($instance);
+            $key = $this->__findDoubleKey($state, $type, $parameter);
+
+            if (null === $key) {
+                throw $this->__unknownDependency($state, $type, $parameter);
+            }
+
+            return [$instance, $state, $key];
+        }
+
+        $instance = $this->currentServiceInstance
+            ?? throw new \LogicException('No services have been mocked yet by the trait');
+        $state = $this->__getServiceState($instance);
+
+        if (null !== ($key = $this->__findDoubleKey($state, $type, $parameter))) {
+            return [$instance, $state, $key];
+        }
+
+        // fall back to the other services created by the trait, but only when unambiguous
+        $matches = [];
+
+        foreach ($this->serviceInstances as $candidate) {
+            if ($candidate === $instance) {
+                continue;
+            }
+
+            $candidateState = $this->__getServiceState($candidate);
+
+            if (null !== ($candidateKey = $this->__findDoubleKey($candidateState, $type, $parameter))) {
+                $matches[] = [$candidate, $candidateState, $candidateKey];
             }
         }
 
-        throw new \LogicException(
+        if (1 === count($matches)) {
+            return $matches[0];
+        }
+
+        if ([] !== $matches) {
+            throw new \LogicException(
+                sprintf(
+                    'Multiple services created by the trait depend on %s, pass the service name to target one of them',
+                    $type
+                )
+            );
+        }
+
+        throw $this->__unknownDependency($state, $type, $parameter);
+    }
+
+    /**
+     * @param ServiceState $state
+     */
+    private function __unknownDependency(
+        array $state,
+        string $type,
+        string|null $parameter
+    ): \LogicException {
+        return new \LogicException(
             sprintf(
                 null === $parameter
                     ? 'Mocked class %s not found in %s, it is either not a dependency of that service or has been provided explicitly'
@@ -206,37 +279,89 @@ trait ServiceMockHelperTrait
     }
 
     /**
+     * Whether return values should be generated for the doubles this trait creates.
+     *
+     * Mirrors TestCase::generateReturnValuesForTestDoubles(), which is private.
+     */
+    private function __generateReturnValues(): bool
+    {
+        return MetadataRegistry::parser()
+            ->forClass(static::class)
+            ->isDisableReturnValueGenerationForTestDoubles()
+            ->isEmpty();
+    }
+
+    /**
+     * Create a test double that is deliberately NOT registered with the TestCase.
+     *
+     * It is a full MockObject, so expects() is available on it, but PHPUnit neither verifies it nor
+     * complains about it having no expectations. It is registered later, on the first
+     * getMockedService() call for it, which is the point at which the test takes ownership of it.
+     *
+     * @param class-string $type
+     */
+    private function __createUnregisteredMock(
+        string $type
+    ): MockObject {
+        // arguments are passed positionally on purpose: PHPUnit marks its API as
+        // @no-named-arguments, so parameter names are not covered by its BC promise
+        $double = new MockGenerator()->testDouble(
+            $type,
+            true, // $mockObject
+            [], // $methods
+            [], // $arguments
+            '', // $mockClassName
+            false, // $callOriginalConstructor
+            false, // $callOriginalClone
+            $this->__generateReturnValues(), // $returnValueGeneration
+        );
+
+        assert($double instanceof MockObject);
+
+        return $double;
+    }
+
+    /**
      * @param class-string $class
      * @param array<string, mixed> $definedParameters
+     * @param ServiceState $state
      *
-     * @return list<array{name: string, type: class-string}>
+     * @return list<mixed>
      */
-    private function __indexMethodParameters(
+    private function __resolveMethodParameters(
         string $class,
         \ReflectionMethod $method,
-        array $definedParameters
+        array $definedParameters,
+        array &$state
     ): array {
-        $parameters = [];
+        /** @var list<mixed> $params */
+        $params = [];
 
         foreach ($method->getParameters() as $parameter) {
-            if (array_key_exists($parameter->getName(), $definedParameters)) {
+            $name = $parameter->getName();
+
+            if (array_key_exists($name, $definedParameters)) {
+                $params[] = $definedParameters[$name];
                 continue;
             }
 
             $type = $this->__parameterType($class, $method, $parameter);
 
+            // only builtin parameters fall back to their default; a class-typed parameter is
+            // doubled even when it is nullable with a default, because tests routinely mock those
             if ($type->isBuiltin()) {
                 if (!$parameter->isDefaultValueAvailable()) {
                     throw new \LogicException(
                         sprintf(
                             'Specify parameter $%s in %s::%s',
-                            $parameter->getName(),
+                            $name,
                             $class,
                             $method->getName()
                         )
                     );
                 }
 
+                $params[] = $parameter->getDefaultValue();
                 continue;
             }
 
@@ -248,99 +373,41 @@ trait ServiceMockHelperTrait
                     sprintf(
                         'Cannot create a test double for unknown type %s of parameter $%s in %s::%s',
                         $typeName,
-                        $parameter->getName(),
+                        $name,
                         $class,
                         $method->getName()
                     )
                 );
             }
 
-            $typeReflection = new \ReflectionClass($typeName);
+            // enums cannot be doubled at all; internal classes generally can be, so they are left
+            // to PHPUnit, which raises a precise error for the ones it cannot handle
+            if (new \ReflectionClass($typeName)->isEnum()) {
+                if ($parameter->isDefaultValueAvailable()) {
+                    $params[] = $parameter->getDefaultValue();
+                    continue;
+                }
 
-            if ($typeReflection->isInternal() || $typeReflection->isEnum()) {
                 throw new \LogicException(
                     sprintf(
-                        'Specify parameter $%s in %s::%s explicitly, %s is %s and cannot be doubled safely',
-                        $parameter->getName(),
+                        'Specify parameter $%s in %s::%s explicitly, %s is an enum and cannot be doubled',
+                        $name,
                         $class,
                         $method->getName(),
-                        $typeName,
-                        $typeReflection->isEnum() ? 'an enum' : 'an internal class'
+                        $typeName
                     )
                 );
             }
 
-            $parameters[] = [
-                'name' => $parameter->getName(),
+            $key = $this->__doubleKey($typeName, $name);
+            $double = $state['doubles'][$key] ??= $this->__createUnregisteredMock($typeName);
+
+            $state['parameters'][] = [
+                'name' => $name,
                 'type' => $typeName,
             ];
-        }
 
-        return $parameters;
-    }
-
-    /**
-     * @param ServiceState $state
-     * @param class-string $type
-     */
-    private function __resolveParameterDouble(
-        array &$state,
-        string $name,
-        string $type,
-        bool $asMock
-    ): object {
-        assert($this instanceof TestCase);
-
-        foreach ([$this->__doubleKey($type, $name), $type] as $key) {
-            if (isset($state['mocks'][$key])) {
-                return $state['mocks'][$key];
-            }
-
-            if (isset($state['stubs'][$key])) {
-                return $state['stubs'][$key];
-            }
-        }
-
-        if ($asMock) {
-            return $state['mocks'][$type] = $this->createMock($type);
-        }
-
-        return $state['stubs'][$type] = static::createStub($type);
-    }
-
-    /**
-     * @param ServiceState $state
-     * @param array<string, mixed> $definedParameters
-     *
-     * @return list<mixed>
-     */
-    private function __resolveMethodParameters(
-        array &$state,
-        \ReflectionMethod $method,
-        array $definedParameters,
-        bool $asMock
-    ): array {
-        /** @var list<mixed> $params */
-        $params = [];
-
-        foreach ($method->getParameters() as $parameter) {
-            if (array_key_exists($parameter->getName(), $definedParameters)) {
-                $params[] = $definedParameters[$parameter->getName()];
-                continue;
-            }
-
-            $type = $this->__parameterType($state['class'], $method, $parameter);
-
-            if ($type->isBuiltin()) {
-                // builtin parameters always have a default value at this point, see __indexMethodParameters()
-                $params[] = $parameter->getDefaultValue();
-                continue;
-            }
-
-            /** @var class-string $typeName */
-            $typeName = $type->getName();
-
-            $params[] = $this->__resolveParameterDouble($state, $parameter->getName(), $typeName, $asMock);
+            $params[] = $double;
         }
 
         return $params;
@@ -368,10 +435,11 @@ trait ServiceMockHelperTrait
     }
 
     /**
-     * Fetch (or declare) a mock for one of the dependencies of a service created by the trait.
+     * Fetch a mock for one of the dependencies of a service created by the trait.
      *
-     * Declaring a mock must happen before the service is used for the first time, as the service
-     * is only built once it is actually touched.
+     * This is what hands ownership of the double to the test: from here on PHPUnit verifies it and
+     * will point out that it has no expectations configured. Dependencies nobody fetches stay
+     * unregistered and are silently left alone.
      *
      * @template TMockFetchTarget of object
      *
@@ -389,42 +457,26 @@ trait ServiceMockHelperTrait
     ): mixed {
         assert($this instanceof TestCase);
 
-        [$instance, $state] = $this->__resolveServiceInstance($service);
-        $key = $this->__doubleKey($class, $parameter);
+        [$instance, $state, $key] = $this->__resolveDouble($class, $parameter, $service);
+        $double = $state['doubles'][$key];
 
-        if (isset($state['mocks'][$key])) {
-            /** @var MockObject&TMockFetchTarget $mock */
-            $mock = $state['mocks'][$key];
+        if (!isset($state['registered'][$key])) {
+            $this->registerMockObject($class, $double);
+            EventFacade::emitter()->testCreatedMockObject($class);
 
-            return $mock;
+            $state['registered'][$key] = true;
+            $this->__setServiceState($instance, $state);
         }
 
-        $this->__assertParameterExists($state, $class, $parameter);
-
-        if ($state['initialized']) {
-            throw new \LogicException(
-                sprintf(
-                    'Service %s has already been created, mock %s cannot be used by it anymore. '
-                    .'Call getMockedService() before using the service for the first time.',
-                    $state['class'],
-                    $class
-                )
-            );
-        }
-
-        $mock = $this->createMock($class);
-        $state['mocks'][$key] = $mock;
-        $this->__setServiceState($instance, $state);
-
-        /** @var MockObject&TMockFetchTarget $mock */
-        return $mock;
+        /** @var MockObject&TMockFetchTarget $double */
+        return $double;
     }
 
     /**
-     * Fetch (or declare) a stub for one of the dependencies of a service created by the trait.
+     * Fetch a dependency of a service created by the trait without taking ownership of it.
      *
-     * Dependencies nobody asks for are stubs anyway, this only hands the stub back so return
-     * values can be configured on it without turning it into a mock.
+     * The double is returned unregistered, so return values can be configured on it while PHPUnit
+     * keeps ignoring it - no verification, and no complaint about missing expectations.
      *
      * @template TStubFetchTarget of object
      *
@@ -442,50 +494,23 @@ trait ServiceMockHelperTrait
     ): mixed {
         assert($this instanceof TestCase);
 
-        [$instance, $state] = $this->__resolveServiceInstance($service);
+        [, $state, $key] = $this->__resolveDouble($class, $parameter, $service);
 
-        foreach (array_unique([$this->__doubleKey($class, $parameter), $class]) as $key) {
-            if (isset($state['mocks'][$key])) {
-                /** @var MockObject&TStubFetchTarget $mock */
-                $mock = $state['mocks'][$key];
+        // every double is a MockObject, which is a Stub; it is handed out as the narrower Stub
+        // so callers do not configure expectations on something PHPUnit never verifies
+        /** @var MockObject&TStubFetchTarget $double */
+        $double = $state['doubles'][$key];
 
-                return $mock;
-            }
-
-            if (isset($state['stubs'][$key])) {
-                /** @var Stub&TStubFetchTarget $stub */
-                $stub = $state['stubs'][$key];
-
-                return $stub;
-            }
-        }
-
-        $this->__assertParameterExists($state, $class, $parameter);
-
-        if ($state['initialized']) {
-            throw new \LogicException(
-                sprintf(
-                    'Service %s has already been created and no stub for %s has been used by it',
-                    $state['class'],
-                    $class
-                )
-            );
-        }
-
-        $stub = static::createStub($class);
-        $state['stubs'][$this->__doubleKey($class, $parameter)] = $stub;
-        $this->__setServiceState($instance, $state);
-
-        /** @var Stub&TStubFetchTarget $stub */
-        return $stub;
+        return $double;
     }
 
     /**
      * Create a real instance of a service with all of its dependencies doubled.
      *
-     * The instance is a lazy ghost, its dependencies are resolved the first time the service is
-     * actually used. Dependencies asked for via getMockedService() become mocks, everything else
-     * becomes a stub, which keeps PHPUnit from complaining about mocks without expectations.
+     * Dependencies are created as unregistered mocks: fully configurable, but invisible to PHPUnit
+     * until the test asks for one with getMockedService(). That keeps PHPUnit from complaining
+     * about the dependencies a test never touches, without constraining when the test configures
+     * the ones it cares about.
      *
      * @template TMockCreationTarget of object
      *
@@ -508,58 +533,33 @@ trait ServiceMockHelperTrait
             throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
         }
 
-        $construct = $reflection->getConstructor();
-        $requiredMethods = $this->__getRequiredMethods($reflection);
-        $parameters = null !== $construct
-            ? $this->__indexMethodParameters($class, $construct, $constructor)
+        /** @var ServiceState $state */
+        $state = [
+            'class' => $class,
+            'parameters' => [],
+            'doubles' => [],
+            'registered' => [],
+        ];
+
+        $params = null !== ($construct = $reflection->getConstructor())
+            ? $this->__resolveMethodParameters($class, $construct, $constructor, $state)
             : [];
 
-        foreach ($requiredMethods as $method) {
-            foreach ($this->__indexMethodParameters($class, $method, $required) as $parameter) {
-                $parameters[] = $parameter;
-            }
-        }
+        $service = new $class(...$params);
 
-        try {
-            $service = $reflection->newLazyGhost(
-                function (object $instance) use ($construct, $requiredMethods, $constructor, $required): void {
-                    $state = $this->__getServiceState($instance);
-                    $state['initialized'] = true;
-
-                    if (null !== $construct) {
-                        $params = $this->__resolveMethodParameters($state, $construct, $constructor, false);
-                        $this->__setServiceState($instance, $state);
-
-                        $construct->invoke($instance, ...$params);
-                    } else {
-                        $this->__setServiceState($instance, $state);
-                    }
-
-                    foreach ($requiredMethods as $method) {
-                        $params = $this->__resolveMethodParameters($state, $method, $required, false);
-                        $this->__setServiceState($instance, $state);
-
-                        $method->invoke($instance, ...$params);
-                    }
-                }
-            );
-        } catch (\ReflectionException $e) {
-            throw new \LogicException(
-                sprintf('Cannot create a lazy instance of %s', $class),
-                previous: $e
+        foreach ($this->__getRequiredMethods($reflection) as $method) {
+            $service->{$method->getName()}(
+                ...$this->__resolveMethodParameters($class, $method, $required, $state)
             );
         }
 
-        $this->__registerService($service, $class, $parameters);
+        $this->__registerService($service, $state);
 
         return $service;
     }
 
     /**
      * Create a partial mock of a service with all of its dependencies doubled.
-     *
-     * A partial mock is a generated class and has to be built eagerly, so its dependencies cannot
-     * be deferred either - they are all created as mocks, exactly like they used to be.
      *
      * @template TMockCreationPartialTarget of object
      *
@@ -584,28 +584,16 @@ trait ServiceMockHelperTrait
             throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
         }
 
-        $construct = $reflection->getConstructor();
-        $requiredMethods = $this->__getRequiredMethods($reflection);
-
         /** @var ServiceState $state */
         $state = [
             'class' => $class,
-            'parameters' => null !== $construct
-                ? $this->__indexMethodParameters($class, $construct, $constructor)
-                : [],
-            'mocks' => [],
-            'stubs' => [],
-            'initialized' => true,
+            'parameters' => [],
+            'doubles' => [],
+            'registered' => [],
         ];
 
-        foreach ($requiredMethods as $method) {
-            foreach ($this->__indexMethodParameters($class, $method, $required) as $parameter) {
-                $state['parameters'][] = $parameter;
-            }
-        }
-
-        $params = null !== $construct
-            ? $this->__resolveMethodParameters($state, $construct, $constructor, true)
+        $params = null !== ($construct = $reflection->getConstructor())
+            ? $this->__resolveMethodParameters($class, $construct, $constructor, $state)
             : [];
 
         $service = new MockBuilder($this, $class)
@@ -614,23 +602,16 @@ trait ServiceMockHelperTrait
             ->onlyMethods($methods)
             ->getMock();
 
-        foreach ($requiredMethods as $method) {
+        foreach ($this->__getRequiredMethods($reflection) as $method) {
             $service->{$method->getName()}(
-                ...$this->__resolveMethodParameters($state, $method, $required, true)
+                ...$this->__resolveMethodParameters($class, $method, $required, $state)
             );
         }
 
-        $this->__registerService(
-            $service,
-            $class,
-            $state['parameters'],
-            $state['mocks'],
-            $state['stubs'],
-            true
-        );
+        $this->__registerService($service, $state);
 
         // MockBuilder does not emit an event of its own, unlike createMock()/createStub()
-        \PHPUnit\Event\Facade::emitter()->testCreatedPartialMockObject(
+        EventFacade::emitter()->testCreatedPartialMockObject(
             $class,
             ...$methods,
         );
