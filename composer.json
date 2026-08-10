@@ -10,9 +10,10 @@
     ],
     "require": {
         "php": ">=8.4",
-        "phpunit/phpunit": ">=12"
+        "phpunit/phpunit": "^12 || ^13"
     },
     "require-dev": {
+        "symfony/service-contracts": "^3",
         "phpstan/phpstan": "^2",
         "phpstan/phpstan-strict-rules": "^2",
         "phpstan/phpstan-phpunit": "^2",
