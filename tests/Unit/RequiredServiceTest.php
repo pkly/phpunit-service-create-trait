@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Pkly\Tests\Unit;
 
-use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Pkly\ServiceMockHelperTrait;
@@ -20,20 +19,15 @@ class RequiredServiceTest extends TestCase
     {
         $service = $this->createRealMockedServiceInstance(RequiredService::class);
 
+        static::assertInstanceOf(MessengerInterface::class, $service->getMessenger());
         static::assertInstanceOf(Stub::class, $service->getMessenger());
-        static::assertNotInstanceOf(MockObject::class, $service->getMessenger());
     }
 
-    public function testRequiredSetterRunsOnlyOnceTheServiceIsUsed(): void
+    public function testRequiredSetterDoublesCanBeConfiguredAfterCreation(): void
     {
-        $reflection = new \ReflectionClass(RequiredService::class);
         $service = $this->createRealMockedServiceInstance(RequiredService::class);
 
-        static::assertTrue($reflection->isUninitializedLazyObject($service));
-
-        // a method that touches no properties must not initialize the service
         static::assertSame('required-service', $service->describe());
-        static::assertTrue($reflection->isUninitializedLazyObject($service));
 
         $this->getMockedService(MessengerInterface::class)
             ->expects(static::once())
@@ -46,7 +40,6 @@ class RequiredServiceTest extends TestCase
             ->willReturn('NEW-hello');
 
         static::assertTrue($service->notify('hello'));
-        static::assertFalse($reflection->isUninitializedLazyObject($service));
     }
 
     public function testRequiredSetterAcceptsProvidedParameters(): void

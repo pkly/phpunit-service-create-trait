@@ -27,9 +27,6 @@ class RequiredService
         return $this->messenger;
     }
 
-    /**
-     * Deliberately touches no properties, so calling it does not initialize a lazy instance.
-     */
     public function describe(): string
     {
         return 'required-service';
