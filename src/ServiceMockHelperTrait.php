@@ -618,4 +618,88 @@ trait ServiceMockHelperTrait
 
         return $service;
     }
+
+    /**
+     * Create a partial stub of a service with all of its dependencies doubled.
+     *
+     * The counterpart to createRealPartialMockedServiceInstance(): the listed methods are
+     * replaced and configurable with method()->willReturn(), every other method runs its real
+     * code, and PHPUnit neither verifies the double nor reports it as a mock object without
+     * expectations. Use it when the test replaces methods to set up a scenario rather than to
+     * assert how they are called - which is what "No expectations were configured for the mock
+     * object for X" is pointing at.
+     *
+     * Use createRealPartialMockedServiceInstance() as soon as the test wants expects() on the
+     * instance itself; a stub has no expects() at all, so the mistake is a hard error rather
+     * than an assertion that quietly stops being checked.
+     *
+     * @template TStubCreationPartialTarget of object
+     *
+     * @param class-string<TStubCreationPartialTarget> $class
+     * @param list<non-empty-string> $methods
+     * @param array<string, mixed> $constructor
+     * @param array<string, mixed> $required
+     *
+     * @return TStubCreationPartialTarget&Stub
+     */
+    protected function createRealPartialStubbedServiceInstance(
+        string $class,
+        array $methods,
+        array $constructor = [],
+        array $required = []
+    ): mixed {
+        assert($this instanceof TestCase);
+
+        try {
+            $reflection = new \ReflectionClass($class); // @phpstan-ignore-line
+        } catch (\ReflectionException $e) { // @phpstan-ignore-line
+            throw new \LogicException('Failed to read class reflection, specify proper FQCN', previous: $e);
+        }
+
+        /** @var ServiceState $state */
+        $state = [
+            'class' => $class,
+            'parameters' => [],
+            'doubles' => [],
+            'registered' => [],
+        ];
+
+        $params = null !== ($construct = $reflection->getConstructor())
+            ? $this->__resolveMethodParameters($class, $construct, $constructor, $state)
+            : [];
+
+        // an empty list must reach the generator as null, exactly as MockBuilder::onlyMethods()
+        // normalises it: for a class, Generator sees [] as "double every method" and null as
+        // "double none", so passing [] straight through would silently turn a partial double
+        // into a full one
+        $explicitMethods = [] === $methods ? null : $methods;
+
+        // arguments are passed positionally on purpose: PHPUnit marks its API as
+        // @no-named-arguments, so parameter names are not covered by its BC promise
+        $service = new MockGenerator()->testDouble(
+            $class,
+            false, // $mockObject - a stub: nothing to verify, nothing to complain about
+            $explicitMethods,
+            $params, // $arguments
+            '', // $mockClassName
+            true, // $callOriginalConstructor
+            false, // $callOriginalClone
+            $this->__generateReturnValues(), // $returnValueGeneration
+        );
+
+        assert($service instanceof Stub);
+
+        foreach ($this->__getRequiredMethods($reflection) as $method) {
+            $service->{$method->getName()}(
+                ...$this->__resolveMethodParameters($class, $method, $required, $state)
+            );
+        }
+
+        $this->__registerService($service, $state);
+
+        // the generator emits no event of its own, unlike createStub()
+        EventFacade::emitter()->testCreatedStub($class);
+
+        return $service;
+    }
 }
