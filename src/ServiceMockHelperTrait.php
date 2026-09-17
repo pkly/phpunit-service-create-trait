@@ -687,7 +687,10 @@ trait ServiceMockHelperTrait
             $this->__generateReturnValues(), // $returnValueGeneration
         );
 
-        assert($service instanceof Stub);
+        // asserting against the class narrows the generator's MockObject|Stub return to the
+        // doubled type, exactly as TestCase::createStub() does; asserting against Stub alone
+        // says nothing, since MockObject already extends it
+        assert($service instanceof $class);
 
         foreach ($this->__getRequiredMethods($reflection) as $method) {
             $service->{$method->getName()}(
