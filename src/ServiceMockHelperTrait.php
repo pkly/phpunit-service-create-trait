@@ -411,11 +411,11 @@ trait ServiceMockHelperTrait
      * complains about it having no expectations. It is registered later, on the first
      * getMockedService() call for it, which is the point at which the test takes ownership of it.
      *
-     * @template T of object
+     * @template TMockType of object
      *
-     * @param class-string<T> $type
+     * @param class-string<TMockType> $type
      *
-     * @return T&MockObject
+     * @return TMockType&MockObject
      */
     protected function createUnregisteredMock(
         string $type
