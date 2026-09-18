@@ -412,7 +412,9 @@ trait ServiceMockHelperTrait
      * getMockedService() call for it, which is the point at which the test takes ownership of it.
      *
      * @template T of object
+     *
      * @param class-string<T> $type
+     *
      * @return T&MockObject
      */
     protected function createUnregisteredMock(
@@ -432,6 +434,7 @@ trait ServiceMockHelperTrait
         );
 
         assert($double instanceof MockObject);
+        assert($double instanceof $type);
 
         return $double;
     }
