@@ -292,36 +292,6 @@ trait ServiceMockHelperTrait
     }
 
     /**
-     * Create a test double that is deliberately NOT registered with the TestCase.
-     *
-     * It is a full MockObject, so expects() is available on it, but PHPUnit neither verifies it nor
-     * complains about it having no expectations. It is registered later, on the first
-     * getMockedService() call for it, which is the point at which the test takes ownership of it.
-     *
-     * @param class-string $type
-     */
-    private function __createUnregisteredMock(
-        string $type
-    ): MockObject {
-        // arguments are passed positionally on purpose: PHPUnit marks its API as
-        // @no-named-arguments, so parameter names are not covered by its BC promise
-        $double = new MockGenerator()->testDouble(
-            $type,
-            true, // $mockObject
-            [], // $methods
-            [], // $arguments
-            '', // $mockClassName
-            false, // $callOriginalConstructor
-            false, // $callOriginalClone
-            $this->__generateReturnValues(), // $returnValueGeneration
-        );
-
-        assert($double instanceof MockObject);
-
-        return $double;
-    }
-
-    /**
      * @param class-string $class
      * @param array<string, mixed> $definedParameters
      * @param ServiceState $state
@@ -400,7 +370,7 @@ trait ServiceMockHelperTrait
             }
 
             $key = $this->__doubleKey($typeName, $name);
-            $double = $state['doubles'][$key] ??= $this->__createUnregisteredMock($typeName);
+            $double = $state['doubles'][$key] ??= $this->createUnregisteredMock($typeName);
 
             $state['parameters'][] = [
                 'name' => $name,
@@ -432,6 +402,41 @@ trait ServiceMockHelperTrait
         }
 
         return $methods;
+    }
+
+    /**
+     * Create a test double that is deliberately NOT registered with the TestCase.
+     *
+     * It is a full MockObject, so expects() is available on it, but PHPUnit neither verifies it nor
+     * complains about it having no expectations. It is registered later, on the first
+     * getMockedService() call for it, which is the point at which the test takes ownership of it.
+     *
+     * @template T of object
+     *
+     * @param class-string<T> $type
+     *
+     * @return T&MockObject
+     */
+    protected function createUnregisteredMock(
+        string $type
+    ): MockObject {
+        // arguments are passed positionally on purpose: PHPUnit marks its API as
+        // @no-named-arguments, so parameter names are not covered by its BC promise
+        $double = new MockGenerator()->testDouble(
+            $type,
+            true, // $mockObject
+            [], // $methods
+            [], // $arguments
+            '', // $mockClassName
+            false, // $callOriginalConstructor
+            false, // $callOriginalClone
+            $this->__generateReturnValues(), // $returnValueGeneration
+        );
+
+        assert($double instanceof MockObject);
+        assert($double instanceof $type);
+
+        return $double;
     }
 
     /**
